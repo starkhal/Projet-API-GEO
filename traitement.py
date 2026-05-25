@@ -14,7 +14,7 @@ import requests
 
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 
 from sklearn.linear_model import (
@@ -749,6 +749,14 @@ def entrainer_modele(df: pd.DataFrame) -> dict:
 
     print(f"\n[ML] Meilleur : {nom_modele} (R²={meilleur['R2']:.3f})")
 
+    # K-Fold sur le meilleur modèle — évaluation plus robuste qu'un seul split
+    print(f"[ML] K-Fold {cv} sur le meilleur modèle...")
+    cv_r2  = cross_val_score(best_model, X, y, cv=cv, scoring="r2", n_jobs=-1)
+    cv_mae = cross_val_score(best_model, X, y, cv=cv,
+                             scoring="neg_mean_absolute_error", n_jobs=-1)
+    print(f"[ML] K-Fold R² : {cv_r2.mean():.3f} ± {cv_r2.std():.3f}")
+    print(f"[ML] K-Fold MAE : {(-cv_mae).mean():.0f} ± {(-cv_mae).std():.0f} €/m²")
+
     X_all, y_all, _ = _preparer_X_y(df)
     X_train, X_test, y_train, y_test = train_test_split(
     X_all, y_all, test_size=0.15, random_state=42)
@@ -773,6 +781,12 @@ def entrainer_modele(df: pd.DataFrame) -> dict:
         "y_test":      y_test,
         "y_pred":      y_pred,
         "comparaison": df_comparaison[colonnes].copy(),
+        # ── Ajouter ces 5 lignes ──
+        "cv_r2_mean":  round(float(cv_r2.mean()), 3),
+        "cv_r2_std":   round(float(cv_r2.std()), 3),
+        "cv_mae_mean": round(float((-cv_mae).mean()), 0),
+        "cv_mae_std":  round(float((-cv_mae).std()), 0),
+        "cv_folds":    cv,
     }
 
 
@@ -805,9 +819,11 @@ if __name__ == "__main__":
             print("\nCOMPARAISON:")
             print(res["comparaison"].to_string(index=False))
             print(f"  MEILLEUR MODÈLE : {res['nom_modele']}")
-            print(f"  R²   : {res['r2']}")
-            print(f"  MAE  : {res['mae']:.0f} €/m²")
-            print(f"  RMSE : {res['rmse']:.0f} €/m²")
+            print(f"  R²   (test)      : {res['r2']}")
+            print(f"  MAE  (test)      : {res['mae']:.0f} €/m²")
+            print(f"  RMSE (test)      : {res['rmse']:.0f} €/m²")
+            print(f"  R²   (K-Fold {res['cv_folds']}) : {res['cv_r2_mean']} ± {res['cv_r2_std']}")
+            print(f"  MAE  (K-Fold {res['cv_folds']}) : {res['cv_mae_mean']:.0f} ± {res['cv_mae_std']:.0f} €/m²")
             print(f"  Communes : {res['n']}")
 
 
