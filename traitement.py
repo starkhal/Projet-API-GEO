@@ -781,7 +781,6 @@ def entrainer_modele(df: pd.DataFrame) -> dict:
         "y_test":      y_test,
         "y_pred":      y_pred,
         "comparaison": df_comparaison[colonnes].copy(),
-        # ── Ajouter ces 5 lignes ──
         "cv_r2_mean":  round(float(cv_r2.mean()), 3),
         "cv_r2_std":   round(float(cv_r2.std()), 3),
         "cv_mae_mean": round(float((-cv_mae).mean()), 0),
