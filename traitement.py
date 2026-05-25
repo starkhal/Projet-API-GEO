@@ -501,6 +501,10 @@ def construire_dataset() -> pd.DataFrame:
 
     df = df[df["nb_ventes"] >= 3].reset_index(drop=True)
     print(f"[Dataset] {len(df):,} communes — prix médian {df['prix_m2_median'].median():.0f} €/m²")
+    
+    # Sauvegarde du dataset final pour le professeur
+    df.to_csv(DATA_DIR / "dataset_final.csv", index=False)
+    print(f"[Export] dataset_final.csv sauvegardé — {len(df)} communes, {len(df.columns)} colonnes")
     return df
 
 
@@ -568,9 +572,10 @@ _CATALOGUE_HP = {
     },
     "K-Nearest Neighbors": {
         "model":  Pipeline([("scaler", StandardScaler()), ("m", KNeighborsRegressor())]),
-        "params": {"m__n_neighbors": [3, 5, 7, 10, 15],
-                   "m__weights": ["uniform", "distance"],
-                   "m__p": [1, 2]},
+        "params": {"m__n_neighbors": [8, 10, 12, 15, 20],
+                   "m__weights":     ["distance"],
+                   "m__p":           [1],
+                   "m__metric":      ["minkowski", "euclidean"]},
     },
     "SVR": {
         "model":  Pipeline([("scaler", StandardScaler()), ("m", SVR())]),
@@ -593,23 +598,25 @@ _CATALOGUE_HP = {
     },
     "Random Forest": {
         "model":  RandomForestRegressor(random_state=42, n_jobs=-1),
-        "params": {"n_estimators": [100, 200, 300],
-                   "max_depth": [8, 12, 20, None],
-                   "min_samples_split": [2, 5, 10],
-                   "max_features": ["sqrt", "log2", None]},
+        "params": {"n_estimators":      [200, 300, 500],
+                   "max_depth":         [15, 20, 25, 30],
+                   "max_features":      ["log2", 0.3, 0.5],
+                   "min_samples_split": [2, 3, 5],
+                   "min_samples_leaf":  [1, 2]},
     },
     "Extra Trees": {
         "model":  ExtraTreesRegressor(random_state=42, n_jobs=-1),
-        "params": {"n_estimators": [100, 200, 300],
-                   "max_depth": [8, 12, 20, None],
-                   "min_samples_split": [2, 5, 10],
-                   "max_features": ["sqrt", "log2", None]},
+        "params": {"n_estimators":      [200, 300, 500],
+                   "max_depth":         [20, 30, None],
+                   "max_features":      [None, "sqrt", 0.5],
+                   "min_samples_split": [5, 10, 20],
+                   "min_samples_leaf":  [1, 2]},
     },
     "Bagging": {
         "model":  BaggingRegressor(random_state=42, n_jobs=-1),
-        "params": {"n_estimators": [50, 100, 200],
-                   "max_samples": [0.7, 0.8, 1.0],
-                   "max_features": [0.7, 0.8, 1.0]},
+        "params": {"n_estimators": [200, 300, 500],
+                   "max_samples":  [0.6, 0.7, 0.75, 0.8],
+                   "max_features": [0.7, 0.8, 0.9]},
     },
     "AdaBoost": {
         "model":  AdaBoostRegressor(random_state=42),
@@ -618,10 +625,11 @@ _CATALOGUE_HP = {
     },
     "Gradient Boosting": {
         "model":  GradientBoostingRegressor(random_state=42),
-        "params": {"n_estimators": [100, 200, 300],
-                   "max_depth": [3, 4, 5, 6],
-                   "learning_rate": [0.01, 0.05, 0.1, 0.2],
-                   "subsample": [0.7, 0.8, 1.0]},
+        "params": {"n_estimators":     [300, 500, 700],
+                   "max_depth":        [3, 4],
+                   "learning_rate":    [0.005, 0.01, 0.02],
+                   "subsample":        [0.7, 0.8, 0.85],
+                   "min_samples_leaf": [1, 2, 4]},
     },
     "HistGradientBoosting": {
         "model":  HistGradientBoostingRegressor(random_state=42),
@@ -641,43 +649,45 @@ _CATALOGUE_HP = {
     },
     "Voting Regressor": {
         "model": VotingRegressor(estimators=[
-            ("rf",  RandomForestRegressor(n_estimators=100, max_depth=10,
-                                          random_state=42, n_jobs=-1)),
-            ("hgb", HistGradientBoostingRegressor(max_iter=100, max_depth=4,
-                                                   learning_rate=0.1, random_state=42)),
-            ("en",  Pipeline([("scaler", StandardScaler()),
-                               ("m", ElasticNet(alpha=0.1, l1_ratio=0.5))])),
+            ("rf",  RandomForestRegressor(n_estimators=300, max_depth=20,
+                                          max_features="log2", random_state=42, n_jobs=-1)),
+            ("et",  ExtraTreesRegressor(n_estimators=300, max_depth=None,
+                                         max_features=None, random_state=42, n_jobs=-1)),
+            ("knn", Pipeline([("scaler", StandardScaler()),
+                               ("m", KNeighborsRegressor(n_neighbors=10,
+                                                          weights="distance", p=1))])),
         ]),
         "params": {},
     },
     "Stacking": {
         "model": StackingRegressor(
             estimators=[
-                ("rf",  RandomForestRegressor(n_estimators=100, max_depth=8,
-                                              random_state=42, n_jobs=-1)),
-                ("hgb", HistGradientBoostingRegressor(max_iter=100, max_depth=4,
-                                                       learning_rate=0.1, random_state=42)),
+                ("rf",  RandomForestRegressor(n_estimators=300, max_depth=20,
+                                              max_features="log2", random_state=42, n_jobs=-1)),
+                ("et",  ExtraTreesRegressor(n_estimators=300, max_depth=None,
+                                             random_state=42, n_jobs=-1)),
                 ("knn", Pipeline([("scaler", StandardScaler()),
-                                   ("m", KNeighborsRegressor(n_neighbors=7))])),
-                ("en",  Pipeline([("scaler", StandardScaler()),
-                                   ("m", ElasticNet(alpha=0.1, l1_ratio=0.5))])),
+                                   ("m", KNeighborsRegressor(n_neighbors=10,
+                                                              weights="distance", p=1))])),
+                ("ada", AdaBoostRegressor(n_estimators=200, learning_rate=0.1,
+                                          random_state=42)),
             ],
-            final_estimator=Ridge(alpha=1.0),
-            cv=5, n_jobs=-1,
+            final_estimator=Ridge(alpha=0.1),
+            cv=10, n_jobs=-1,
         ),
         "params": {},
     },
 }
 
-
-def comparer_tous_modeles(df: pd.DataFrame, cv: int = 5) -> pd.DataFrame:
+#plus de folds : 5-> 10
+def comparer_tous_modeles(df: pd.DataFrame, cv: int = 10) -> pd.DataFrame:
     X, y, features = _preparer_X_y(df)
     if X is None:
         print("[ML] Données insuffisantes")
         return pd.DataFrame()
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
+        X, y, test_size=0.15, random_state=42
     )
 
     resultats = []
@@ -741,8 +751,7 @@ def entrainer_modele(df: pd.DataFrame) -> dict:
 
     X_all, y_all, _ = _preparer_X_y(df)
     X_train, X_test, y_train, y_test = train_test_split(
-        X_all, y_all, test_size=0.2, random_state=42
-    )
+    X_all, y_all, test_size=0.15, random_state=42)
     y_pred = best_model.predict(X_test)
 
     estimateur = (best_model.named_steps.get("m", list(best_model.named_steps.values())[-1])
@@ -801,6 +810,7 @@ if __name__ == "__main__":
             print(f"  RMSE : {res['rmse']:.0f} €/m²")
             print(f"  Communes : {res['n']}")
 
+
             print("\nIMPORTANCE DES VARIABLES:")
             print(res["importance"].to_string(index=False))
 
@@ -834,3 +844,4 @@ if __name__ == "__main__":
             plt.legend()
             plt.tight_layout()
             plt.show()
+            
